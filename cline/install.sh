@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK_DIR="$HOME/.agentgate/cline-build"
 
 echo ""
-echo "=== AgentGate — Cline Setup ==="
+echo "=== AgentGate — Cline Build & Install ==="
 echo ""
 
 # ── Check requirements ────────────────────────────────────────────────────────
@@ -20,8 +20,8 @@ command -v code >/dev/null 2>&1 || { echo "ERROR: 'code' CLI not found. In VS Co
 CONFIG="$HOME/.claude/remote_approval.json"
 if [ ! -f "$CONFIG" ]; then
     echo "ERROR: Telegram config not found at $CONFIG"
-    echo "Run the AgentGate setup wizard first:"
-    echo "  cd ../claude-code && python3 setup.py"
+    echo "Run the Cline setup wizard first:"
+    echo "  python3 setup.py"
     exit 1
 fi
 echo "✓ Telegram config found"

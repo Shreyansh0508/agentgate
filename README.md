@@ -17,12 +17,9 @@ AgentGate intercepts approval requests from AI coding tools and routes them to y
 
 ## Quick Start
 
-### 1. Create a Telegram Bot (shared by both tools)
+Each tool has its own independent setup — install only what you use.
 
-1. Open Telegram → search **@BotFather** → send `/newbot`
-2. Copy the bot token it gives you
-
-### 2. Run the setup wizard
+### Claude Code CLI
 
 ```bash
 git clone https://github.com/Shreyansh0508/agentgate
@@ -32,12 +29,17 @@ python3 setup.py
 
 This sets up the Telegram bot and registers hooks for Claude Code CLI.
 
-### 3. Set up Cline (optional)
+### Cline (VS Code extension)
 
 ```bash
+git clone https://github.com/Shreyansh0508/agentgate  # skip if already cloned
 cd agentgate/cline
-bash install.sh
+python3 setup.py
 ```
+
+This sets up the Telegram bot and builds + installs the patched Cline extension.
+
+> Both setups write to the same config file (`~/.claude/remote_approval.json`), so if you use both tools, the bot token and chat ID are shared automatically.
 
 ---
 
@@ -51,7 +53,8 @@ agentgate/
 │   └── README.md       # Full Claude Code setup guide
 │
 ├── cline/              # Cline VS Code extension integration
-│   ├── install.sh      # Clones Cline, patches it, installs .vsix
+│   ├── setup.py        # One-time wizard (Telegram config + build + install)
+│   ├── install.sh      # Build-only script (re-run to update)
 │   ├── TelegramNotificationService.ts
 │   ├── index.patch
 │   └── README.md       # Full Cline setup guide

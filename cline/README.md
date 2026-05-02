@@ -35,39 +35,31 @@ This works because the install script patches Cline's `ask()` method to fire a T
 ## Requirements
 
 - macOS
+- Python 3 (no pip installs — pure stdlib)
 - Node.js + npm
 - Git
 - VS Code with `code` CLI installed
-- A Telegram account + bot token (from the Claude Code setup)
+- A Telegram account
 
 ---
 
 ## Setup
 
-### Step 1 — Run Claude Code setup first
-
-The Telegram bot config is shared between Claude Code and Cline. If you haven't set it up yet:
-
-```bash
-cd ../claude-code
-python3 setup.py
-```
-
-### Step 2 — Run the Cline installer
+### Step 1 — Run the setup wizard
 
 ```bash
 cd cline
-bash install.sh
+python3 setup.py
 ```
 
-The installer:
-1. Clones latest Cline from GitHub
-2. Copies `TelegramNotificationService.ts` into the source
-3. Applies `index.patch` to wire in the parallel watcher
-4. Builds the extension (`npm install` + `npm run package`)
-5. Installs the `.vsix` directly into VS Code
+The wizard:
+1. Validates your Telegram bot token
+2. Auto-detects your chat ID
+3. Sends a test notification to verify everything works
+4. Saves config to `~/.claude/remote_approval.json`
+5. Automatically runs `install.sh` to build and install the extension
 
-### Step 3 — Restart VS Code
+### Step 2 — Restart VS Code
 
 Reload VS Code after install. Cline will now send Telegram notifications for every tool approval.
 
@@ -77,7 +69,8 @@ Reload VS Code after install. Cline will now send Telegram notifications for eve
 
 ```
 cline/
-├── install.sh                      # Automated build + install script
+├── setup.py                        # One-time setup wizard (run this)
+├── install.sh                      # Build + install script (called by setup.py)
 ├── TelegramNotificationService.ts  # New service added to Cline
 └── index.patch                     # Patch for src/core/task/index.ts
 ```
@@ -86,7 +79,11 @@ cline/
 
 ## Updating
 
-When Cline releases a new version, just run `install.sh` again — it pulls the latest Cline and re-applies the patch.
+When Cline releases a new version, run `install.sh` directly to rebuild without re-running the full wizard:
+
+```bash
+bash install.sh
+```
 
 If the patch fails (Cline's `index.ts` changed significantly), [open an issue](https://github.com/Shreyansh0508/agentgate/issues).
 
