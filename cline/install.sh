@@ -77,9 +77,10 @@ npm install --silent
 cd webview-ui && npm install --silent && cd ..
 echo "✓ Dependencies installed"
 
-echo "Building extension (this takes ~30 seconds)..."
+echo "Building extension (this takes ~60 seconds)..."
 npm run protos --silent
 npm run package --silent 2>&1 | grep -E "DONE|ERROR|warning" || true
+npx vsce package --no-dependencies --out . 2>&1 | grep -E "DONE|Packaged|ERROR" || true
 echo "✓ Build complete"
 
 # ── Package & Install ─────────────────────────────────────────────────────────
