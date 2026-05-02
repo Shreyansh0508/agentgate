@@ -99,6 +99,10 @@ if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     exit 1
 fi
 npx vsce package --no-dependencies --out . 2>&1 | grep -E "DONE|Packaged|ERROR" || true
+if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+    echo "ERROR: vsce package failed. Check output above."
+    exit 1
+fi
 echo "✓ Build complete"
 
 # ── Package & Install ─────────────────────────────────────────────────────────

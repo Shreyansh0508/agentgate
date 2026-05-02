@@ -103,11 +103,17 @@ def poll_for_callback(
     stop_event=None,
 ) -> tuple[str, str] | None:
     """Returns ("approve"|"deny", callback_query_id) or None on timeout/stop."""
+    # Drain all currently pending updates to get a clean starting offset.
+    # offset=-1 is not a valid Telegram API value; use timeout=0 to get all unconfirmed updates.
     offset = 0
+    try:
+        data = _api(token, "getUpdates", {"timeout": 0})
+        for u in data.get("result", []):
+            offset = u["update_id"] + 1
+    except Exception:
+        pass
+
     deadline = time.time() + timeout
-    data = _api(token, "getUpdates", {"offset": -1, "limit": 1, "timeout": 0})
-    for u in data.get("result", []):
-        offset = u["update_id"] + 1
 
     while time.time() < deadline:
         if stop_event and stop_event.is_set():
@@ -144,10 +150,14 @@ def poll_for_text_reply(
 ) -> str | None:
     """Waits for a text message that is a reply to reply_to_message_id. Returns text or None."""
     offset = 0
+    try:
+        data = _api(token, "getUpdates", {"timeout": 0})
+        for u in data.get("result", []):
+            offset = u["update_id"] + 1
+    except Exception:
+        pass
+
     deadline = time.time() + timeout
-    data = _api(token, "getUpdates", {"offset": -1, "limit": 1, "timeout": 0})
-    for u in data.get("result", []):
-        offset = u["update_id"] + 1
 
     while time.time() < deadline:
         remaining = int(deadline - time.time())

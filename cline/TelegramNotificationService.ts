@@ -151,8 +151,9 @@ export function startTelegramApprovalWatcher(
 
 	;(async () => {
 		try {
-			// Drain stale updates before sending so we don't pick up old callbacks
-			const { offset: startOffset } = await getUpdates(token, -1, 0)
+			// Drain all pending updates to get a clean starting offset.
+			// offset=-1 is not a valid Telegram API value; omit it to get all unconfirmed updates.
+			const { offset: startOffset } = await getUpdates(token, 0, 0)
 
 			const messageId = await sendMessage(token, chatId, msgText, replyMarkup)
 			if (!messageId || stopped) return

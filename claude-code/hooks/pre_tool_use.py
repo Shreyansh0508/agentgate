@@ -230,6 +230,8 @@ def main():
     t_terminal.start()
 
     done.wait(timeout=timeout + 15)
+    # Give telegram thread a moment to write telegram_msg_id before the main thread reads it
+    t_telegram.join(timeout=5)
 
     # Update Telegram message to reflect final outcome
     if telegram_msg_id[0]:

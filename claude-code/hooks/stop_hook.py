@@ -86,9 +86,9 @@ def main():
     tg.edit_message_text(token, chat_id, message_id, text + f"\n\n<i>✅ Reply sent: {html.escape(reply[:100])}</i>")
 
     print(json.dumps({
-        "decision": "block",
         "hookSpecificOutput": {
             "hookEventName": "Stop",
+            "decision": "block",
             "additionalContext": f"User replied via phone: '{reply}'",
         },
     }))

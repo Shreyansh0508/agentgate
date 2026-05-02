@@ -84,7 +84,10 @@ def main():
 
     # Step 4: Timeout
     timeout_input = input("\nStep 4: Seconds to wait before auto-denying [300]: ").strip()
-    timeout = int(timeout_input) if timeout_input.isdigit() else 300
+    try:
+        timeout = max(30, int(timeout_input))
+    except ValueError:
+        timeout = 300
 
     # Step 5: Test round-trip
     print("\nStep 5: Testing round-trip — check Telegram and tap Approve or Deny...")
@@ -102,6 +105,7 @@ def main():
         print(f"  ✓ Test response received: {decision}")
 
     # Step 6: Write config
+    os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
     config = {
         "bot_token": token,
         "chat_id": chat_id,
