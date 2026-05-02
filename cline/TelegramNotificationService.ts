@@ -18,7 +18,11 @@ function loadConfig(): TelegramConfig | null {
 	}
 }
 
-function httpsPost(url: string, body: object): Promise<any> {
+function escapeHtml(s: string): string {
+	return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+}
+
+function httpsPost(url: string, body: object, rejectUnauthorized = true): Promise<any> {
 	return new Promise((resolve, reject) => {
 		const data = JSON.stringify(body)
 		const u = new URL(url)
@@ -28,7 +32,7 @@ function httpsPost(url: string, body: object): Promise<any> {
 				path: u.pathname,
 				method: "POST",
 				headers: { "Content-Type": "application/json", "Content-Length": Buffer.byteLength(data) },
-				rejectUnauthorized: false, // handles corporate HTTPS proxies
+				rejectUnauthorized,
 			},
 			(res) => {
 				let raw = ""
@@ -52,8 +56,22 @@ function httpsPost(url: string, body: object): Promise<any> {
 	})
 }
 
+const SSL_ERROR_CODES = new Set(["CERT_HAS_EXPIRED", "UNABLE_TO_VERIFY_LEAF_SIGNATURE", "SELF_SIGNED_CERT_IN_CHAIN", "UNABLE_TO_GET_ISSUER_CERT_LOCALLY", "ERR_TLS_CERT_ALTNAME_INVALID"])
+
+async function httpsPostWithFallback(url: string, body: object): Promise<any> {
+	try {
+		return await httpsPost(url, body, true)
+	} catch (err: any) {
+		// Only bypass TLS for certificate errors (e.g. corporate HTTPS proxy with custom CA)
+		if (err?.code && (SSL_ERROR_CODES.has(err.code) || String(err.code).includes("CERT") || String(err.code).includes("SSL"))) {
+			return httpsPost(url, body, false)
+		}
+		throw err
+	}
+}
+
 async function apiCall(token: string, method: string, payload: object): Promise<any> {
-	return httpsPost(`https://api.telegram.org/bot${token}/${method}`, payload)
+	return httpsPostWithFallback(`https://api.telegram.org/bot${token}/${method}`, payload)
 }
 
 async function sendMessage(token: string, chatId: string, text: string, replyMarkup: object): Promise<number | null> {
@@ -118,9 +136,9 @@ export function startTelegramApprovalWatcher(
 	}
 
 	const msgText =
-		`<b>Cline wants to use <code>${askType}</code></b>\n\n` +
-		(text ? `<code>${text.slice(0, 300)}</code>\n\n` : "") +
-		`Project: <code>${project}</code>`
+		`<b>Cline wants to use <code>${escapeHtml(askType)}</code></b>\n\n` +
+		(text ? `<code>${escapeHtml(text.slice(0, 300))}</code>\n\n` : "") +
+		`Project: <code>${escapeHtml(project)}</code>`
 
 	const replyMarkup = {
 		inline_keyboard: [
@@ -150,6 +168,7 @@ export function startTelegramApprovalWatcher(
 				for (const update of updates) {
 					const cq = update.callback_query
 					if (!cq) continue
+					if (String(cq.from?.id) !== String(chatId)) continue  // reject callbacks from other users
 					if (cq.message?.message_id !== messageId) continue
 					const data: string = cq.data || ""
 					if (data !== `approve:${sessionId}` && data !== `deny:${sessionId}`) continue

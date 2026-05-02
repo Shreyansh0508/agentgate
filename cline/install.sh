@@ -79,7 +79,11 @@ echo "✓ Dependencies installed"
 
 echo "Building extension (this takes ~60 seconds)..."
 npm run protos --silent
-npm run package --silent 2>&1 | grep -E "DONE|ERROR|warning" || true
+npm run package 2>&1 | grep -E "DONE|ERROR|warning" || true
+if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+    echo "ERROR: Build failed (npm run package). Check output above."
+    exit 1
+fi
 npx vsce package --no-dependencies --out . 2>&1 | grep -E "DONE|Packaged|ERROR" || true
 echo "✓ Build complete"
 

@@ -1,6 +1,7 @@
 import json
 import os
 import ssl
+import sys
 import time
 import urllib.request
 import urllib.parse
@@ -51,6 +52,40 @@ def answer_callback(token: str, callback_query_id: str) -> None:
     _api(token, "answerCallbackQuery", {"callback_query_id": callback_query_id})
 
 
+def validate_token(token: str) -> str | None:
+    """Returns the bot username if the token is valid, else None."""
+    try:
+        r = _api(token, "getMe", {})
+        if r.get("ok"):
+            return r["result"]["username"]
+    except Exception:
+        pass
+    return None
+
+
+def get_chat_id(token: str, timeout: int = 120) -> tuple[str, str] | tuple[None, None]:
+    """
+    Polls getUpdates until the first message arrives, returning (chat_id, first_name).
+    Prints dots to stdout as progress. Returns (None, None) on timeout.
+    """
+    deadline = time.time() + timeout
+    offset = 0
+    while time.time() < deadline:
+        try:
+            r = _api(token, "getUpdates", {"offset": offset, "timeout": 10})
+        except Exception:
+            time.sleep(2)
+            continue
+        for update in r.get("result", []):
+            offset = update["update_id"] + 1
+            msg = update.get("message")
+            if msg:
+                return str(msg["chat"]["id"]), msg["chat"].get("first_name", "")
+        sys.stdout.write(".")
+        sys.stdout.flush()
+    return None, None
+
+
 def poll_for_callback(
     token: str,
     chat_id: str,
@@ -81,6 +116,8 @@ def poll_for_callback(
             cq = update.get("callback_query")
             if not cq:
                 continue
+            if str(cq.get("from", {}).get("id")) != str(chat_id):
+                continue  # reject callbacks from users other than the configured owner
             cb_data = cq.get("data", "")
             cb_msg_id = cq.get("message", {}).get("message_id")
             if cb_msg_id != message_id:

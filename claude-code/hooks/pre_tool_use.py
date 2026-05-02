@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """PreToolUse hook — terminal prompt + Telegram notification fired simultaneously."""
+import html
 import json
 import os
 import select
@@ -168,9 +169,9 @@ def main():
     formatted = _format_tool_input(tool_name, tool_input)
 
     text = (
-        f"<b>Claude wants to run <code>{tool_name}</code></b>\n\n"
-        f"<code>{formatted[:300]}</code>\n\n"
-        f"Project: <code>{project}</code>"
+        f"<b>Claude wants to run <code>{html.escape(tool_name)}</code></b>\n\n"
+        f"<code>{html.escape(formatted[:300])}</code>\n\n"
+        f"Project: <code>{html.escape(project)}</code>"
     )
     reply_markup = {
         "inline_keyboard": [[
@@ -240,7 +241,7 @@ if __name__ == "__main__":
     try:
         main()
     except FileNotFoundError:
-        sys.exit(0)
+        _deny("AgentGate config not found — run setup.py to configure")
     except Exception as e:
         print(str(e), file=sys.stderr)
         _deny(f"Hook error — denied for safety: {e}")

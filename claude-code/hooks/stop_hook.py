@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Stop hook — detects when Claude is waiting for input and routes a phone reply back as context."""
+import html
 import json
 import os
 import sys
@@ -55,7 +56,7 @@ def main():
 
     text = (
         f"<b>Claude is waiting for your input:</b>\n\n"
-        f"{display_msg}\n\n"
+        f"{html.escape(display_msg)}\n\n"
         f"<i>↩️ Reply to this message with your answer</i>"
     )
     message_id = tg.send_message(token, chat_id, text)
