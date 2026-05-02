@@ -35,8 +35,16 @@ def send_message(token: str, chat_id: str, text: str, reply_markup: dict | None 
     payload: dict = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
     if reply_markup:
         payload["reply_markup"] = reply_markup
-    result = _api(token, "sendMessage", payload)
-    return result["result"]["message_id"]
+    last_err = None
+    for attempt in range(3):
+        try:
+            result = _api(token, "sendMessage", payload)
+            return result["result"]["message_id"]
+        except Exception as e:
+            last_err = e
+            if attempt < 2:
+                time.sleep(2 ** attempt)  # 1s, 2s backoff
+    raise RuntimeError(f"send_message failed after 3 attempts: {last_err}")
 
 
 def edit_message_text(token: str, chat_id: str, message_id: int, text: str) -> None:

@@ -4,6 +4,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORK_DIR="$HOME/.agentgate/cline-build"
 
+# Pin a specific Cline release tag to avoid silent upstream breakage.
+# Override with: CLINE_VERSION=v3.82.0 bash install.sh
+# Set to empty to always pull the latest (less safe).
+CLINE_VERSION="${CLINE_VERSION:-v3.82.0}"
+
 echo ""
 echo "=== AgentGate — Cline Build & Install ==="
 echo ""
@@ -32,10 +37,19 @@ mkdir -p "$WORK_DIR"
 
 if [ -d "$WORK_DIR/cline/.git" ]; then
     echo "✓ Cline repo already exists — pulling latest..."
-    git -C "$WORK_DIR/cline" pull --ff-only
+    git -C "$WORK_DIR/cline" fetch --tags
+    if [ -n "$CLINE_VERSION" ]; then
+        git -C "$WORK_DIR/cline" checkout "$CLINE_VERSION" --quiet
+    else
+        git -C "$WORK_DIR/cline" pull --ff-only
+    fi
 else
-    echo "Cloning Cline..."
-    git clone --depth=1 https://github.com/cline/cline.git "$WORK_DIR/cline"
+    echo "Cloning Cline ${CLINE_VERSION:-latest}..."
+    if [ -n "$CLINE_VERSION" ]; then
+        git clone --depth=1 --branch "$CLINE_VERSION" https://github.com/cline/cline.git "$WORK_DIR/cline"
+    else
+        git clone --depth=1 https://github.com/cline/cline.git "$WORK_DIR/cline"
+    fi
     echo "✓ Cloned"
 fi
 

@@ -9,6 +9,12 @@ CONFIG_PATH = os.path.expanduser("~/.claude/remote_approval.json")
 HOOKS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hooks")
 
 
+def _is_agentgate_command(command: str) -> bool:
+    """Match hooks by script name regardless of clone path."""
+    markers = ["pre_tool_use.py", "stop_hook.py", "agentgate"]
+    return any(m in command for m in markers)
+
+
 def _remove_hooks():
     if not os.path.exists(SETTINGS_PATH):
         print("  ~/.claude/settings.json not found — nothing to remove.")
@@ -24,7 +30,7 @@ def _remove_hooks():
         entries = hooks.get(event, [])
         filtered = [
             e for e in entries
-            if not any(HOOKS_DIR in h.get("command", "") for h in e.get("hooks", []))
+            if not any(_is_agentgate_command(h.get("command", "")) for h in e.get("hooks", []))
         ]
         if len(filtered) != len(entries):
             changed = True

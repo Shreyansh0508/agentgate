@@ -79,13 +79,23 @@ cline/
 
 ## Updating
 
-When Cline releases a new version, run `install.sh` directly to rebuild without re-running the full wizard:
+When Cline releases a new version, update the `CLINE_VERSION` pin in `install.sh` to the new tag, then rebuild:
 
 ```bash
-bash install.sh
+CLINE_VERSION=v3.83.0 bash install.sh
 ```
 
 If the patch fails (Cline's `index.ts` changed significantly), [open an issue](https://github.com/Shreyansh0508/agentgate/issues).
+
+---
+
+## Differences from Claude Code integration
+
+| | Claude Code | Cline |
+|---|---|---|
+| **Per-tool filtering** | Configurable — only fires for tools in `require_approval_tools` | Fires for all tool approvals (`command`, `tool`, `browser_action_launch`, `use_mcp_server`) |
+| **Terminal prompt** | 10s terminal prompt → then Telegram | No terminal prompt — Telegram fires immediately alongside VS Code dialog |
+| **Response channels** | Terminal or Telegram | VS Code dialog or Telegram |
 
 ---
 

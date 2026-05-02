@@ -13,6 +13,16 @@ from hooks.lib import config as cfg
 from hooks.lib import telegram as tg
 
 TERMINAL_TIMEOUT = 10  # seconds before terminal prompt closes
+_LOG = os.path.expanduser("~/.agentgate/agentgate.log")
+
+
+def _log(msg: str):
+    try:
+        os.makedirs(os.path.dirname(_LOG), exist_ok=True)
+        with open(_LOG, "a") as f:
+            f.write(f"{time.strftime('%Y-%m-%d %H:%M:%S')} [pre_tool_use] {msg}\n")
+    except Exception:
+        pass
 
 
 def _allow():
@@ -155,6 +165,8 @@ def main():
     cwd = data.get("cwd", "")
     project = os.path.basename(cwd) if cwd else "unknown"
 
+    _log(f"request: tool={tool_name} session={session_id} project={project}")
+
     conf = cfg.load()
 
     if cfg.should_auto_approve(tool_name, conf):
@@ -180,10 +192,11 @@ def main():
         ]]
     }
 
-    # Shared state between threads
+    # Shared state between threads — lock protects the first-write-wins logic
     decision = [None]
     source = [None]
     done = threading.Event()
+    lock = threading.Lock()
     telegram_msg_id = [None]
     telegram_callback_id = [None]
 
@@ -192,19 +205,23 @@ def main():
             msg_id = tg.send_message(token, chat_id, text, reply_markup)
             telegram_msg_id[0] = msg_id
             result = tg.poll_for_callback(token, chat_id, msg_id, session_id, timeout, stop_event=done)
-            if result and not done.is_set():
-                decision[0], telegram_callback_id[0] = result
-                source[0] = "telegram"
-                done.set()
-        except Exception:
-            pass
+            if result:
+                with lock:
+                    if not done.is_set():
+                        decision[0], telegram_callback_id[0] = result
+                        source[0] = "telegram"
+                        done.set()
+        except Exception as e:
+            _log(f"telegram thread error: {e}")
 
     def run_terminal():
         result = _terminal_prompt(tool_name, formatted, project, done)
-        if result and not done.is_set():
-            decision[0] = result
-            source[0] = "terminal"
-            done.set()
+        if result:
+            with lock:
+                if not done.is_set():
+                    decision[0] = result
+                    source[0] = "terminal"
+                    done.set()
 
     t_telegram = threading.Thread(target=run_telegram, daemon=True)
     t_terminal = threading.Thread(target=run_terminal, daemon=True)
@@ -230,10 +247,13 @@ def main():
             pass
 
     if decision[0] == "approve":
+        _log(f"approved via {source[0]}")
         _allow()
     elif decision[0] == "deny":
+        _log(f"denied via {source[0]}")
         _deny(f"Denied via {source[0] or 'timeout'}")
     else:
+        _log("timed out — denied")
         _deny("Timed out — denied for safety")
 
 
