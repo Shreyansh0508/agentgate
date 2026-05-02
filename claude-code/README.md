@@ -82,6 +82,7 @@ with [WAITING_FOR_INPUT] so the remote notification system activates.
 ```
 claude-code/
 ├── setup.py                  # One-time setup wizard
+├── uninstall.py              # Removes hooks and optionally config
 ├── requirements.txt          # Empty — no dependencies
 └── hooks/
     ├── pre_tool_use.py       # Intercepts tool calls
@@ -90,6 +91,17 @@ claude-code/
         ├── config.py         # Loads ~/.claude/remote_approval.json
         └── telegram.py       # Telegram API (urllib only)
 ```
+
+---
+
+## Uninstall
+
+```bash
+cd claude-code
+python3 uninstall.py
+```
+
+Removes the hooks from `~/.claude/settings.json` and optionally deletes the Telegram config.
 
 ---
 

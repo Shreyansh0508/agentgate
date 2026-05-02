@@ -91,8 +91,9 @@ If the patch fails (Cline's `index.ts` changed significantly), [open an issue](h
 
 ## Uninstall
 
-Reinstall the official Cline extension from the VS Code marketplace:
+```bash
+cd cline
+bash uninstall.sh
+```
 
-```
-Cmd+Shift+X → search "Cline" → Install
-```
+Reinstalls the official Cline from the VS Code marketplace and optionally removes the Telegram config and build directory.
