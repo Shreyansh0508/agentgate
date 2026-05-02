@@ -1,0 +1,45 @@
+diff --git a/src/core/task/index.ts b/src/core/task/index.ts
+index 95e7577..6a58830 100644
+--- a/src/core/task/index.ts
++++ b/src/core/task/index.ts
+@@ -77,6 +77,7 @@ import cloneDeep from "clone-deep"
+ import fs from "fs/promises"
+ import Mutex from "p-mutex"
+ import pWaitFor from "p-wait-for"
++import { startTelegramApprovalWatcher } from "@services/telegram/TelegramNotificationService"
+ import * as path from "path"
+ import { ulid } from "ulid"
+ import type { SystemPromptContext } from "@/core/prompts/system-prompt"
+@@ -790,6 +791,23 @@ export class Task {
+ 		}
+ 
+ 		const shouldWakeOnAbort = type !== "resume_task" && type !== "resume_completed_task"
++
++		// Fire Telegram notification in parallel with the VS Code approval dialog.
++		// Whichever the user responds to first (VS Code button or phone tap) wins.
++		const TOOL_APPROVAL_TYPES: ClineAsk[] = ["command", "tool", "browser_action_launch", "use_mcp_server"]
++		let stopTelegramWatcher: (() => void) | undefined
++		if (TOOL_APPROVAL_TYPES.includes(type)) {
++			stopTelegramWatcher = startTelegramApprovalWatcher(
++				type,
++				text || "",
++				this.taskId,
++				path.basename(this.cwd || "unknown"),
++				(approved) => {
++					void this.handleWebviewAskResponse(approved ? "yesButtonClicked" : "noButtonClicked")
++				},
++			)
++		}
++
+ 		await pWaitFor(
+ 			() =>
+ 				this.taskState.askResponse !== undefined ||
+@@ -797,6 +815,8 @@ export class Task {
+ 				(shouldWakeOnAbort && this.taskState.abort),
+ 			{ interval: 100 },
+ 		)
++
++		stopTelegramWatcher?.()
+ 		if (shouldWakeOnAbort && this.taskState.abort) {
+ 			throw new Error("Cline instance aborted")
+ 		}

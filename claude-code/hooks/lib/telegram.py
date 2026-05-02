@@ -57,18 +57,20 @@ def poll_for_callback(
     message_id: int,
     session_id: str,
     timeout: int,
+    stop_event=None,
 ) -> tuple[str, str] | None:
-    """Returns ("approve"|"deny", callback_query_id) or None on timeout."""
+    """Returns ("approve"|"deny", callback_query_id) or None on timeout/stop."""
     offset = 0
     deadline = time.time() + timeout
-    # Drain old updates first to get a clean offset
     data = _api(token, "getUpdates", {"offset": -1, "limit": 1, "timeout": 0})
     for u in data.get("result", []):
         offset = u["update_id"] + 1
 
     while time.time() < deadline:
+        if stop_event and stop_event.is_set():
+            return None
         remaining = int(deadline - time.time())
-        poll_secs = min(25, max(1, remaining))
+        poll_secs = min(5, max(1, remaining))  # short chunks so stop_event is checked often
         try:
             data = _api(token, "getUpdates", {"offset": offset, "timeout": poll_secs})
         except Exception:

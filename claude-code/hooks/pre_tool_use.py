@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
-"""PreToolUse hook — intercepts tool calls and sends phone approval requests via Telegram."""
+"""PreToolUse hook — terminal prompt + Telegram notification fired simultaneously."""
 import json
 import os
 import select
 import sys
+import threading
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from hooks.lib import config as cfg
 from hooks.lib import telegram as tg
 
-TERMINAL_TIMEOUT = 10  # seconds before falling back to Telegram
+TERMINAL_TIMEOUT = 10  # seconds before terminal prompt closes
 
 
 def _allow():
@@ -42,11 +43,11 @@ def _format_tool_input(tool_name: str, tool_input: dict) -> str:
     return json.dumps(tool_input)[:300]
 
 
-def _terminal_prompt(tool_name: str, cmd: str, project: str) -> str | None:
+def _terminal_prompt(tool_name: str, cmd: str, project: str, done_event: threading.Event) -> str | None:
     """
-    Interactive selector on /dev/tty.
-    Arrow keys (← →) switch between Allow / Don't allow.
-    Enter confirms. 20s timeout returns None → falls back to Telegram.
+    Interactive selector on /dev/tty. Closes after TERMINAL_TIMEOUT seconds
+    or when done_event is set (Telegram responded first).
+    Returns 'approve', 'deny', or None.
     """
     try:
         import tty as _tty
@@ -72,9 +73,8 @@ def _terminal_prompt(tool_name: str, cmd: str, project: str) -> str | None:
         w(f"  │  Project: {project:<{box_w - 12}}│\r\n")
         w(f"  ╰{'─' * box_w}╯\r\n")
         w("\r\n")
-        # 2 dynamic lines drawn in loop below
 
-        selected = 0  # 0 = Allow, 1 = Don't allow
+        selected = 0
         deadline = time.time() + TERMINAL_TIMEOUT
         result = None
         first = True
@@ -83,17 +83,23 @@ def _terminal_prompt(tool_name: str, cmd: str, project: str) -> str | None:
             remaining = max(0, int(deadline - time.time()))
 
             if not first:
-                w("\x1b[2A")  # move cursor up 2 lines to redraw
+                w("\x1b[2A")
             first = False
 
-            if selected == 0:
-                opts = "  \x1b[7m Allow \x1b[0m   Don't allow  "
-            else:
-                opts = "   Allow    \x1b[7m Don't allow \x1b[0m"
+            if done_event.is_set():
+                w("  \x1b[2m(Responded via Telegram)\x1b[0m\x1b[K\r\n")
+                w("\x1b[K\r\n")
+                break
+
+            opts = ("  \x1b[7m Allow \x1b[0m   Don't allow  " if selected == 0
+                    else "   Allow    \x1b[7m Don't allow \x1b[0m")
             w(opts + "\x1b[K\r\n")
-            w(f"  \x1b[2m← → to switch · Enter to confirm · Telegram in {remaining}s\x1b[0m\x1b[K\r\n")
+            w(f"  \x1b[2m← → · Enter to confirm · also sent to Telegram · {remaining}s\x1b[0m\x1b[K\r\n")
 
             if remaining == 0:
+                w("\x1b[2A")
+                w("  \x1b[2m(No terminal response — waiting for Telegram...)\x1b[0m\x1b[K\r\n")
+                w("\x1b[K\r\n")
                 break
 
             ready, _, _ = select.select([fd], [], [], 0.5)
@@ -101,36 +107,35 @@ def _terminal_prompt(tool_name: str, cmd: str, project: str) -> str | None:
                 continue
 
             ch = fd.read(1)
-
             if ch in (b"\r", b"\n"):
                 result = "approve" if selected == 0 else "deny"
                 break
-            elif ch == b"\x03":  # Ctrl+C
+            elif ch == b"\x03":
                 result = "deny"
                 break
             elif ch == b"\x1b":
                 r2, _, _ = select.select([fd], [], [], 0.05)
                 if not r2:
-                    result = "deny"  # lone Escape
+                    result = "deny"
                     break
                 b2 = fd.read(1)
                 if b2 == b"[":
                     r3, _, _ = select.select([fd], [], [], 0.05)
                     if r3:
                         b3 = fd.read(1)
-                        if b3 in (b"C", b"D", b"A", b"B"):  # any arrow key toggles
+                        if b3 in (b"C", b"D", b"A", b"B"):
                             selected ^= 1
 
         termios.tcsetattr(fd, termios.TCSADRAIN, old)
 
-        w("\x1b[2A")
         if result == "approve":
-            w("  ✅ Approved\x1b[K\r\n")
+            w("\x1b[2A")
+            w("  ✅ Approved from terminal\x1b[K\r\n")
+            w("\x1b[K\r\n")
         elif result == "deny":
-            w("  ❌ Denied\x1b[K\r\n")
-        else:
-            w("  ⏱  No response — sending Telegram notification...\x1b[K\r\n")
-        w("\x1b[K\r\n")
+            w("\x1b[2A")
+            w("  ❌ Denied from terminal\x1b[K\r\n")
+            w("\x1b[K\r\n")
 
         fd.close()
         return result
@@ -157,18 +162,10 @@ def main():
     if not cfg.should_require_approval(tool_name, conf):
         sys.exit(0)
 
-    formatted = _format_tool_input(tool_name, tool_input)
-    terminal_result = _terminal_prompt(tool_name, formatted, project)
-
-    if terminal_result == "approve":
-        _allow()
-    if terminal_result == "deny":
-        _deny("Denied from terminal")
-
-    # No response in 20s — fall back to Telegram
     token = conf["bot_token"]
     chat_id = conf["chat_id"]
     timeout = conf.get("poll_timeout_seconds", 300)
+    formatted = _format_tool_input(tool_name, tool_input)
 
     text = (
         f"<b>Claude wants to run <code>{tool_name}</code></b>\n\n"
@@ -182,23 +179,61 @@ def main():
         ]]
     }
 
-    message_id = tg.send_message(token, chat_id, text, reply_markup)
-    result = tg.poll_for_callback(token, chat_id, message_id, session_id, timeout)
+    # Shared state between threads
+    decision = [None]
+    source = [None]
+    done = threading.Event()
+    telegram_msg_id = [None]
+    telegram_callback_id = [None]
 
-    if result is None:
-        tg.edit_message_text(token, chat_id, message_id, text + "\n\n<i>⏱ Timed out — auto-denied</i>")
-        _deny("Timed out — denied for safety")
+    def run_telegram():
+        try:
+            msg_id = tg.send_message(token, chat_id, text, reply_markup)
+            telegram_msg_id[0] = msg_id
+            result = tg.poll_for_callback(token, chat_id, msg_id, session_id, timeout, stop_event=done)
+            if result and not done.is_set():
+                decision[0], telegram_callback_id[0] = result
+                source[0] = "telegram"
+                done.set()
+        except Exception:
+            pass
 
-    decision, callback_id = result
-    tg.answer_callback(token, callback_id)
+    def run_terminal():
+        result = _terminal_prompt(tool_name, formatted, project, done)
+        if result and not done.is_set():
+            decision[0] = result
+            source[0] = "terminal"
+            done.set()
 
-    status = "✅ Approved" if decision == "approve" else "❌ Denied"
-    tg.edit_message_text(token, chat_id, message_id, text + f"\n\n<i>{status}</i>")
+    t_telegram = threading.Thread(target=run_telegram, daemon=True)
+    t_terminal = threading.Thread(target=run_terminal, daemon=True)
 
-    if decision == "approve":
+    t_telegram.start()
+    t_terminal.start()
+
+    done.wait(timeout=timeout + 15)
+
+    # Update Telegram message to reflect final outcome
+    if telegram_msg_id[0]:
+        try:
+            if source[0] == "telegram" and telegram_callback_id[0]:
+                tg.answer_callback(token, telegram_callback_id[0])
+            if decision[0] == "approve":
+                suffix = "\n\n<i>✅ Approved" + (" from terminal" if source[0] == "terminal" else "") + "</i>"
+            elif decision[0] == "deny":
+                suffix = "\n\n<i>❌ Denied" + (" from terminal" if source[0] == "terminal" else "") + "</i>"
+            else:
+                suffix = "\n\n<i>⏱ Timed out — auto-denied</i>"
+            tg.edit_message_text(token, chat_id, telegram_msg_id[0], text + suffix)
+        except Exception:
+            pass
+
+    if decision[0] == "approve":
         _allow()
+    elif decision[0] == "deny":
+        _deny(f"Denied via {source[0] or 'timeout'}")
     else:
-        _deny("Denied via Telegram")
+        _deny("Timed out — denied for safety")
 
 
 if __name__ == "__main__":
